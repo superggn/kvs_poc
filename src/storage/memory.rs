@@ -1,4 +1,4 @@
-use crate::{KvError, Kvpair, Storage, Value};
+use crate::{KvError, Kvpair, Storage, StorageIter, Value};
 use dashmap::{DashMap, mapref::one::Ref};
 
 #[derive(Clone, Debug, Default)]
@@ -29,7 +29,14 @@ impl Storage for MemTable {
         Ok(table.get(key).map(|v| v.value().clone()))
     }
     /// 从一个 HashTable 里设置一个 key 的 value，返回旧的 value
-    fn set(&self, table: &str, key: String, value: Value) -> Result<Option<Value>, KvError> {
+    fn set(
+        &self,
+        table: &str,
+        key: impl Into<String>,
+        value: impl Into<Value>,
+    ) -> Result<Option<Value>, KvError> {
+        let key = key.into();
+        let value = value.into();
         let table = self.get_or_create_table(table);
         Ok(table.insert(key, value))
     }
@@ -53,7 +60,21 @@ impl Storage for MemTable {
     }
     /// 遍历 HashTable，返回 kv pair 的 Iterator
     fn get_iter(&self, table: &str) -> Result<Box<dyn Iterator<Item = Kvpair>>, KvError> {
-        todo!();
+        let table = self.get_or_create_table(table).clone();
+        let iter = StorageIter::new(table.into_iter());
+        Ok(Box::new(iter))
+    }
+    // fn get_iter(&self, table: &str) -> Result<Box<dyn Iterator<Item = Kvpair>>, KvError> {
+    //     // 使用 clone() 来获取 table 的 snapshot
+    //     let table = self.get_or_create_table(table).clone();
+    //     let iter = StorageIter::new(table.into_iter());
+    //     Ok(Box::new(iter))
+    // }
+}
+
+impl From<(String, Value)> for Kvpair {
+    fn from(data: (String, Value)) -> Self {
+        Kvpair::new(data.0, data.1)
     }
 }
 
