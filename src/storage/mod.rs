@@ -94,28 +94,28 @@ mod tests {
         // set
         let v = store.set("t1", "hello", "world");
         assert!(v.unwrap().is_none());
-        let v = store.set("t1", "hello", "world1");
-        assert_eq!(v, Ok(Some("world".into())));
+        let v = store.set("t1", "hello", "world1").unwrap();
+        assert_eq!(v, Some("world".into()));
 
         // get
-        let v = store.get("t1", "hello");
-        assert_eq!(v, Ok(Some("world1".into())));
+        let v = store.get("t1", "hello").unwrap();
+        assert_eq!(v, Some("world1".into()));
 
-        assert_eq!(Ok(None), store.get("t1", "hello1"));
+        assert_eq!(None, store.get("t1", "hello1").unwrap());
         // assert_eq!(Ok(None), store.get("t2", "hello1"));
         assert!(store.get("t2", "hello1").unwrap().is_none());
 
         // contains
-        assert_eq!(store.contains("t1", "hello"), Ok(true));
-        assert_eq!(store.contains("t1", "hello1"), Ok(false));
-        assert_eq!(store.contains("t2", "hello1"), Ok(false));
+        assert_eq!(store.contains("t1", "hello").unwrap(), true);
+        assert_eq!(store.contains("t1", "hello1").unwrap(), false);
+        assert_eq!(store.contains("t2", "hello1").unwrap(), false);
 
         // del
-        let v = store.del("t1", "hello");
-        assert_eq!(v, Ok(Some("world1".into())));
+        let v = store.del("t1", "hello").unwrap();
+        assert_eq!(v, Some("world1".into()));
 
-        assert_eq!(Ok(None), store.del("t1", "hello1"));
-        assert_eq!(Ok(None), store.del("t2", "hello"));
+        assert_eq!(None, store.del("t1", "hello1").unwrap());
+        assert_eq!(None, store.del("t2", "hello").unwrap());
     }
 
     fn test_get_all(store: impl Storage) {

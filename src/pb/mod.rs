@@ -4,6 +4,7 @@ pub mod abi {
 
 use crate::KvError;
 use abi::{command_request::RequestData, *};
+use bytes::Bytes;
 use http::StatusCode;
 use prost::Message;
 
@@ -33,6 +34,60 @@ impl CommandRequest {
             request_data: Some(RequestData::Hset(Hset {
                 table: table.into(),
                 pair: Some(Kvpair::new(key, value)),
+            })),
+        }
+    }
+
+    pub fn new_hmget(table: impl Into<String>, keys: Vec<String>) -> Self {
+        Self {
+            request_data: Some(RequestData::Hmget(Hmget {
+                table: table.into(),
+                keys,
+            })),
+        }
+    }
+
+    pub fn new_hmset(table: impl Into<String>, pairs: Vec<Kvpair>) -> Self {
+        Self {
+            request_data: Some(RequestData::Hmset(Hmset {
+                table: table.into(),
+                pairs,
+            })),
+        }
+    }
+
+    pub fn new_hdel(table: impl Into<String>, key: impl Into<String>) -> Self {
+        Self {
+            request_data: Some(RequestData::Hdel(Hdel {
+                table: table.into(),
+                key: key.into(),
+            })),
+        }
+    }
+
+    pub fn new_hmdel(table: impl Into<String>, keys: Vec<String>) -> Self {
+        Self {
+            request_data: Some(RequestData::Hmdel(Hmdel {
+                table: table.into(),
+                keys,
+            })),
+        }
+    }
+
+    pub fn new_hexist(table: impl Into<String>, key: impl Into<String>) -> Self {
+        Self {
+            request_data: Some(RequestData::Hexist(Hexist {
+                table: table.into(),
+                key: key.into(),
+            })),
+        }
+    }
+
+    pub fn new_hmexist(table: impl Into<String>, keys: Vec<String>) -> Self {
+        Self {
+            request_data: Some(RequestData::Hmexist(Hmexist {
+                table: table.into(),
+                keys,
             })),
         }
     }
@@ -75,6 +130,18 @@ impl From<i64> for Value {
     }
 }
 
+impl<const N: usize> From<&[u8; N]> for Value {
+    fn from(buf: &[u8; N]) -> Self {
+        Bytes::copy_from_slice(&buf[..]).into()
+    }
+}
+
+// impl<const N: usize> From<&[u8; N]> for Value {
+//     fn from(buf: &[u8; N]) -> Self {
+//         Bytes::copy_from_slice(&buf[..]).into()
+//     }
+// }
+
 /// 从 Value 转换成 CommandResponse
 impl From<Value> for CommandResponse {
     fn from(v: Value) -> Self {
@@ -85,6 +152,26 @@ impl From<Value> for CommandResponse {
         }
     }
 }
+
+impl From<Vec<Value>> for CommandResponse {
+    fn from(v: Vec<Value>) -> Self {
+        Self {
+            status: StatusCode::OK.as_u16() as _,
+            values: v,
+            ..Default::default()
+        }
+    }
+}
+
+// impl From<Vec<Value>> for CommandResponse {
+//     fn from(v: Vec<Value>) -> Self {
+//         Self {
+//             status: StatusCode::OK.as_u16() as _,
+//             values: v,
+//             ..Default::default()
+//         }
+//     }
+// }
 
 /// 从 Vec<Kvpair> 转换成 CommandResponse
 impl From<Vec<Kvpair>> for CommandResponse {
@@ -117,6 +204,22 @@ impl From<KvError> for CommandResponse {
         res
     }
 }
+
+impl From<Bytes> for Value {
+    fn from(buf: Bytes) -> Self {
+        Self {
+            value: Some(value::Value::Binary(buf.into())),
+        }
+    }
+}
+
+// impl From<Bytes> for Value {
+//     fn from(buf: Bytes) -> Self {
+//         Self {
+//             value: Some(value::Value::Binary(buf)),
+//         }
+//     }
+// }
 
 impl TryFrom<Value> for Vec<u8> {
     type Error = KvError;
