@@ -26,4 +26,7 @@ pub enum KvError {
 
     #[error("Internal error: {0}")]
     Internal(String),
+
+    #[error("TLS error")]
+    TlsError(#[from] tokio_rustls::rustls::TLSError),
 }

@@ -1,4 +1,5 @@
 mod frame;
+mod tls;
 
 use crate::{CommandRequest, CommandResponse, KvError, Service};
 
