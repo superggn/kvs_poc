@@ -151,7 +151,15 @@ impl TlsClientConnector {
 //     let mut cert = Cursor::new(cert);
 //     pemfile::certs(&mut cert).map_err(|_| KvError::CertifcateParseError("server", "cert"))
 // }
-
+fn load_key(key: &str) -> Result<PrivateKey, KvError> {
+    let mut cursor = Cursor::new(key);
+    if let Ok(mut keys) = pemfile::pkcs8_private_keys(&mut cursor) {
+        if !key.is_empty() {
+            return Ok(keys.remove(0));
+        }
+    }
+    Err(KvError::CertificateParseError("private", "key"))
+}
 // fn load_key(key: &str) -> Result<PrivateKey, KvError> {
 //     let mut cursor = Cursor::new(key);
 
