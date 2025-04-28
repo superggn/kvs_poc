@@ -1,6 +1,8 @@
 mod frame;
+mod tls;
 
 use crate::{CommandRequest, CommandResponse, KvError, Service};
+pub use tls::{TlsClientConnector, TlsServerAcceptor};
 
 use bytes::BytesMut;
 use frame::{FrameCodec, read_frame};
