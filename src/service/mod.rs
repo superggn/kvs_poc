@@ -204,7 +204,7 @@ mod tests {
             info!("Data is sent");
         }
 
-        tracing_subscriber::fmt::init();
+        // tracing_subscriber::fmt::init();
         let service: Service = ServiceInner::new(MemTable::new())
             .fn_received(|_: &CommandRequest| {})
             .fn_received(b)
