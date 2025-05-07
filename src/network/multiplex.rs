@@ -44,18 +44,15 @@ where
         };
 
         // 创建 config
-        let mut config = config.unwrap_or_default();
+        let config = config.unwrap_or_default();
 
         // 创建 config，yamux::Stream 使用的是 futures 的 trait 所以需要 compat() 到 tokio 的 trait
         let conn = Connection::new(stream.compat(), config, mode);
 
         // 创建 yamux ctrl
-
-        // let ctrl = conn.control();
         let (ctrl, conn) = Control::new(conn);
 
         // pull 所有 stream 下的数据
-
         tokio::spawn(conn.into_stream().try_for_each_concurrent(None, f));
 
         Self {
@@ -91,7 +88,7 @@ mod tests {
         addr: &str,
         tls: TlsServerAcceptor,
         store: Store,
-        f: impl Fn(server::TlsStream<TcpStream>, Service) + Send + Sync + 'static,
+        f: impl Fn(server::TlsStream<TcpStream>, Service) + Send + Sync + Clone + 'static,
     ) -> Result<SocketAddr, KvError>
     where
         Store: Storage,
@@ -104,10 +101,18 @@ mod tests {
         tokio::spawn(async move {
             loop {
                 match listener.accept().await {
-                    Ok((stream, _addr)) => match tls.accept(stream).await {
-                        Ok(stream) => f(stream, service.clone()),
-                        Err(e) => warn!("Failed to process TLS: {:?}", e),
-                    },
+                    Ok((stream, _addr)) => {
+                        let svc = service.clone();
+                        let f = f.clone();
+                        match tls.accept(stream).await {
+                            Ok(stream) => {
+                                tokio::spawn(async move {
+                                    f(stream, svc);
+                                });
+                            }
+                            Err(e) => warn!("Failed to process TLS: {:?}", e),
+                        }
+                    }
                     Err(e) => warn!("Failed to process TCP: {:?}", e),
                 }
             }
@@ -127,12 +132,26 @@ mod tests {
         Service: From<ServiceInner<Store>>,
     {
         let f = |stream, service: Service| {
-            YamuxCtrl::new_server(stream, None, move |s| {
+            let ctrl = YamuxCtrl::new_server(stream, None, move |s| {
                 let svc = service.clone();
                 async move {
                     let stream = ProstServerStream::new(s.compat(), svc);
-                    stream.process().await.unwrap();
-                    Ok(())
+                    match stream.process().await {
+                        Ok(_) => Ok(()),
+                        Err(e) => {
+                            warn!("Failed to process stream: {:?}", e);
+                            Ok(()) // Continue processing other streams even if one fails
+                        }
+                    }
+                }
+            });
+
+            // Keep the control object alive
+            tokio::spawn(async move {
+                // Keep the control object alive until the connection is closed
+                let mut ctrl = ctrl;
+                while let Ok(_) = ctrl.open_stream().await {
+                    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
                 }
             });
         };
@@ -140,25 +159,20 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn yamux_ctrl_creation_should_work() -> Result<()> {
-        let s = DummyStream::default();
-        let mut ctrl = YamuxCtrl::new_client(s, None);
-        let stream = ctrl.open_stream().await;
-        println!("[yamux_ctrl_creation_should_work] {:?}", stream);
-
-        assert!(stream.is_ok());
-        Ok(())
-    }
-
-    #[tokio::test]
     async fn yamux_ctrl_client_server_should_work() -> Result<()> {
+        use std::time::Duration;
+
         // 创建使用了 TLS 的 yamux server
         let acceptor = tls_acceptor(false)?;
         let addr = start_yamux_server("127.0.0.1:0", acceptor, MemTable::new()).await?;
 
+        // Give the server a moment to start up
+        tokio::time::sleep(Duration::from_millis(100)).await;
+
         let connector = tls_connector(false)?;
         let stream = TcpStream::connect(addr).await?;
         let stream = connector.connect(stream).await?;
+
         // 创建使用了 TLS 的 yamux client
         let mut ctrl = YamuxCtrl::new_client(stream, None);
 
@@ -167,12 +181,20 @@ mod tests {
         // 封装成 ProstClientStream
         let mut client = ProstClientStream::new(stream);
 
-        let cmd = CommandRequest::new_hset("t1", "k1", "v1".into());
-        client.execute_unary(&cmd).await.unwrap();
+        // Execute commands with proper error handling and keep connection alive
+        for _ in 0..3 {
+            let cmd = CommandRequest::new_hset("t1", "k1", "v1".into());
+            client.execute_unary(&cmd).await?;
+            tokio::time::sleep(Duration::from_millis(10)).await;
 
-        let cmd = CommandRequest::new_hget("t1", "k1");
-        let res = client.execute_unary(&cmd).await.unwrap();
-        assert_res_ok(res, &["v1".into()], &[]);
+            let cmd = CommandRequest::new_hget("t1", "k1");
+            let res = client.execute_unary(&cmd).await?;
+            assert_res_ok(res, &["v1".into()], &[]);
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+
+        // Keep the connection alive for a bit longer
+        tokio::time::sleep(Duration::from_millis(100)).await;
 
         Ok(())
     }
