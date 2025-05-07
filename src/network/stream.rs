@@ -43,7 +43,7 @@ where
     }
 }
 
-impl<S, In, Out> Sink<Out> for ProstStream<S, In, Out>
+impl<S, In, Out> Sink<&Out> for ProstStream<S, In, Out>
 where
     S: AsyncRead + AsyncWrite + Unpin + Send,
     In: Unpin + Send,
@@ -57,7 +57,7 @@ where
     }
 
     /// push item into wbuf
-    fn start_send(self: Pin<&mut Self>, item: Out) -> Result<(), Self::Error> {
+    fn start_send(self: Pin<&mut Self>, item: &Out) -> Result<(), Self::Error> {
         let this = self.get_mut();
         item.encode_frame(&mut this.wbuf)?;
         Ok(())
@@ -122,7 +122,7 @@ mod tests {
         let mut stream = ProstStream::<_, CommandRequest, CommandRequest>::new(stream);
         let cmd = CommandRequest::new_hdel("t1", "k1");
         // send() should work
-        stream.send(cmd.clone()).await?;
+        stream.send(&cmd).await?;
         // next() should work
         if let Some(Ok(s)) = stream.next().await {
             assert_eq!(s, cmd);

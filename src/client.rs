@@ -14,7 +14,7 @@ async fn main() -> Result<()> {
     let stream = connector.connect(raw_stream).await?;
     let mut client_stream = ProstClientStream::new(stream);
     let cmd = CommandRequest::new_hset("t1", "hello", "world!!!".to_string().into());
-    let data = client_stream.execute(cmd).await?;
+    let data = client_stream.execute_unary(&cmd).await?;
     info!("got resp: {:?}", data);
     Ok(())
 }

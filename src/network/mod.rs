@@ -1,11 +1,14 @@
 mod frame;
+mod multiplex;
 mod stream;
+mod stream_result;
 mod tls;
 
 use crate::{CommandRequest, CommandResponse, KvError, Service};
 pub use frame::{FrameCodec, read_frame};
 use futures::{SinkExt, StreamExt};
 pub use stream::ProstStream;
+pub use stream_result::StreamResult;
 pub use tls::{TlsClientConnector, TlsServerAcceptor};
 
 use tokio::io::{AsyncRead, AsyncWrite};
@@ -31,7 +34,7 @@ where
         while let Some(Ok(cmd)) = stream.next().await {
             info!("??? got a new command: {:?}", cmd);
             let resp = self.service.execute(cmd);
-            stream.send(resp).await.unwrap();
+            stream.send(&resp).await.unwrap();
         }
         Ok(())
     }
@@ -43,7 +46,7 @@ pub struct ProstClientStream<S> {
 
 impl<S> ProstClientStream<S>
 where
-    S: AsyncRead + AsyncWrite + Unpin + Send,
+    S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
     pub fn new(stream: S) -> Self {
         Self {
@@ -51,13 +54,35 @@ where
         }
     }
 
-    pub async fn execute(&mut self, cmd: CommandRequest) -> Result<CommandResponse, KvError> {
+    // pub async fn execute(&mut self, cmd: CommandRequest) -> Result<CommandResponse, KvError> {
+    //     let stream = &mut self.inner;
+    //     stream.send(&cmd).await?;
+    //     match stream.next().await {
+    //         Some(v) => v,
+    //         None => Err(KvError::Internal("Didn't get any response".into())),
+    //     }
+    // }
+
+    pub async fn execute_unary(
+        &mut self,
+        cmd: &CommandRequest,
+    ) -> Result<CommandResponse, KvError> {
         let stream = &mut self.inner;
         stream.send(cmd).await?;
+
         match stream.next().await {
             Some(v) => v,
             None => Err(KvError::Internal("Didn't get any response".into())),
         }
+    }
+
+    pub async fn execute_streaming(self, cmd: &CommandRequest) -> Result<StreamResult, KvError> {
+        let mut stream = self.inner;
+
+        stream.send(cmd).await?;
+        stream.close().await?;
+
+        StreamResult::new(stream).await
     }
 }
 
@@ -67,6 +92,8 @@ pub mod utils {
     use bytes::{BufMut, BytesMut};
     use std::task::Poll;
     use tokio::io::{AsyncRead, AsyncWrite};
+
+    #[derive(Default)]
     pub struct DummyStream {
         pub buf: BytesMut,
     }
@@ -128,10 +155,10 @@ mod tests {
         let stream = TcpStream::connect(addr).await?;
         let mut client = ProstClientStream::new(stream);
         let cmd = CommandRequest::new_hset("t1", "k1", "v1".into());
-        let res = client.execute(cmd).await.unwrap();
+        let res = client.execute_unary(&cmd).await.unwrap();
         assert_res_ok(res, &[Value::default()], &[]);
         let cmd = CommandRequest::new_hget("t1", "k1");
-        let res = client.execute(cmd).await.unwrap();
+        let res = client.execute_unary(&cmd).await.unwrap();
         assert_res_ok(res, &["v1".into()], &[]);
         Ok(())
     }
@@ -144,10 +171,10 @@ mod tests {
         let mut client = ProstClientStream::new(stream);
         let v_long: Value = Bytes::from(vec![0u8; 16384]).into();
         let cmd = CommandRequest::new_hset("t1", "k1", v_long.clone());
-        let res = client.execute(cmd).await.unwrap();
+        let res = client.execute_unary(&cmd).await.unwrap();
         assert_res_ok(res, &[Value::default()], &[]);
         let cmd = CommandRequest::new_hget("t1", "k1");
-        let res = client.execute(cmd).await.unwrap();
+        let res = client.execute_unary(&cmd).await.unwrap();
         assert_res_ok(res, &[v_long], &[]);
         Ok(())
     }

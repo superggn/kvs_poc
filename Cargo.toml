@@ -23,13 +23,14 @@ tracing = "0.1" # 日志处理
 sled = "0.34.7"
 tokio = { version = "1", features = ["rt", "rt-multi-thread", "io-util", "macros", "net", "fs" ] } # 异步网络库
 flate2 = "1.1.1"
-tokio-util = { version = "0.7", features = ["codec"] }
+tokio-util = { version = "0.7", features = ["codec", "compat"] }
 anyhow = "1" # 错误处理
 tracing-subscriber = "0.3" # 日志处理
 # tokio-rustls = "0.26"
 tokio-rustls = "0.22"
 rustls-native-certs = "0.5"
 futures = "0.3.21" # 提供 Stream trait
+yamux = "0.13"
 
 
 
