@@ -21,6 +21,8 @@ pub struct ProstStream<S, In, Out> {
     _out: PhantomData<Out>,
 }
 
+// 这里的 in 是相对我来说的, 我从 stream 中读取的 item 是我的 input, 所以是 In
+// stream 的 output 是我的 In
 impl<S, In, Out> Stream for ProstStream<S, In, Out>
 where
     S: AsyncRead + AsyncWrite + Unpin + Send,
@@ -43,6 +45,8 @@ where
     }
 }
 
+// 这里的 out 是相对我来说的, 我向 sink 中发送 item 是我的 output, 所以是 Out
+// sink 的 input 是我的 Out
 impl<S, In, Out> Sink<&Out> for ProstStream<S, In, Out>
 where
     S: AsyncRead + AsyncWrite + Unpin + Send,

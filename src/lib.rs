@@ -3,7 +3,6 @@ pub mod network;
 pub mod pb;
 pub mod service;
 pub mod storage;
-pub mod yamux;
 
 pub use error::KvError;
 pub use network::*;
