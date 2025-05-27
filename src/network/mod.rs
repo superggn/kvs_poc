@@ -29,13 +29,27 @@ where
             service,
         }
     }
+
     pub async fn process(mut self) -> Result<(), KvError> {
         let stream = &mut self.inner;
-        while let Some(Ok(cmd)) = stream.next().await {
-            info!("??? got a new command: {:?}", cmd);
-            let resp = self.service.execute(cmd);
-            stream.send(&resp).await.unwrap();
+        while let Some(cmd) = stream.next().await {
+            match cmd {
+                Ok(cmd) => {
+                    tracing::info!("Got a new command: {:?}", cmd);
+                    let resp = self.service.execute(cmd);
+                    if let Err(e) = stream.send(&resp).await {
+                        tracing::error!("Failed to send response: {:?}", e);
+                        return Err(e);
+                    }
+                    tracing::info!("Response sent successfully");
+                }
+                Err(e) => {
+                    tracing::error!("Failed to process command: {:?}", e);
+                    return Err(e);
+                }
+            }
         }
+        tracing::info!("Client disconnected");
         Ok(())
     }
 }
